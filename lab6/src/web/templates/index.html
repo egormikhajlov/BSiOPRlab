@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Метод ЭЛЕКТРА — выбор станка (Вариант 9)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-emerald-950 text-emerald-50 min-h-screen font-sans p-8">
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2 text-lime-300">Многокритериальный выбор: Метод ЭЛЕКТРА</h1>
+    <p class="text-emerald-300 mb-8">Лабораторная работа №6. Вариант 9 — Выбор станка (СТ1–СТ6)</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Панель управления -->
+        <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700 h-fit">
+            <h2 class="text-xl font-semibold mb-6 border-b border-emerald-700 pb-2 text-lime-300">Управление</h2>
+
+            <label class="flex items-center space-x-3 mb-6 cursor-pointer">
+                <input type="checkbox" id="usePareto" checked
+                       class="w-5 h-5 text-lime-600 rounded bg-emerald-800 border-emerald-600">
+                <span class="text-sm font-medium">Отбор по множеству Парето</span>
+            </label>
+
+            <div class="mb-6">
+                <label class="block text-sm text-emerald-300 mb-2">
+                    Индекс согласия (c*): <span id="cVal" class="text-white font-bold">0.5</span>
+                </label>
+                <input type="range" id="cThresh" min="0.1" max="1.0" step="0.05" value="0.5"
+                       class="w-full accent-lime-500">
+            </div>
+
+            <div class="mb-6">
+                <label class="block text-sm text-emerald-300 mb-2">
+                    Индекс несогласия (d*): <span id="dVal" class="text-white font-bold">0.5</span>
+                </label>
+                <input type="range" id="dThresh" min="0.1" max="1.0" step="0.05" value="0.5"
+                       class="w-full accent-lime-500">
+            </div>
+
+            <button id="calcBtn"
+                    class="w-full bg-lime-600 hover:bg-lime-500 text-emerald-950 font-bold py-3 rounded transition">
+                Рассчитать ядро
+            </button>
+
+            <div class="mt-6 pt-4 border-t border-emerald-700">
+                <h3 class="text-xs text-emerald-300 uppercase tracking-wider mb-2">Веса критериев</h3>
+                <ul id="weightsList" class="space-y-1 text-sm text-emerald-200"></ul>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-emerald-300 text-xs font-semibold uppercase tracking-wider mb-2">
+                    Ядро ЭЛЕКТРА (лучшие альтернативы)
+                </h3>
+                <div id="kernelResult" class="text-2xl font-bold text-lime-200 flex flex-wrap gap-2"></div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Радарная диаграмма станков</h3>
+                <p class="text-xs text-emerald-300 mb-3">Нормированные оценки по трём критериям (чем больше — тем лучше)</p>
+                <div id="radarDiv" class="w-full h-[420px]"></div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="bg-emerald-900/50 p-6 rounded-xl border border-emerald-700">
+                    <h3 class="text-sm font-semibold text-emerald-300 mb-3">Оптимальные по Парето</h3>
+                    <ul id="paretoList" class="list-disc list-inside text-lime-300 space-y-1"></ul>
+                </div>
+                <div class="bg-emerald-900/50 p-6 rounded-xl border border-emerald-700">
+                    <h3 class="text-sm font-semibold text-emerald-300 mb-3">Индексы согласия</h3>
+                    <div id="cMatrix" class="text-xs font-mono text-emerald-200 overflow-x-auto"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const cThresh = document.getElementById('cThresh');
+    const dThresh = document.getElementById('dThresh');
+    const cVal = document.getElementById('cVal');
+    const dVal = document.getElementById('dVal');
+
+    cThresh.addEventListener('input', e => cVal.textContent = e.target.value);
+    dThresh.addEventListener('input', e => dVal.textContent = e.target.value);
+
+    async function calculate() {
+        const payload = {
+            c_threshold: parseFloat(cThresh.value),
+            d_threshold: parseFloat(dThresh.value),
+            use_pareto: document.getElementById('usePareto').checked
+        };
+
+        const res = await fetch('/api/calculate', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        renderKernel(res);
+        renderPareto(res);
+        renderWeights(res);
+        renderCMatrix(res);
+        renderRadar(res);
+    }
+
+    function renderKernel(res) {
+        const el = document.getElementById('kernelResult');
+        el.innerHTML = res.electre.kernel.map(k =>
+            `<span class="bg-lime-700 text-emerald-50 px-4 py-1 rounded-full text-xl border border-lime-500">${k}</span>`
+        ).join('');
+    }
+
+    function renderPareto(res) {
+        document.getElementById('paretoList').innerHTML =
+            res.pareto_set.map(f => `<li>${f}</li>`).join('');
+    }
+
+    function renderWeights(res) {
+        const names = {prod: 'Производительность', cost: 'Стоимость', rel: 'Надёжность'};
+        document.getElementById('weightsList').innerHTML =
+            Object.entries(res.weights).map(([k, v]) =>
+                `<li>${names[k] || k}: <span class="text-white font-bold">${v.toFixed(2)}</span></li>`
+            ).join('');
+    }
+
+    function renderCMatrix(res) {
+        const alts = res.electre.alternatives;
+        const m = res.electre.c_matrix;
+
+        let html = '<table class="text-xs"><tr><th class="pr-2"></th>';
+        alts.forEach(a => html += `<th class="px-1 text-lime-300">${a}</th>`);
+        html += '</tr>';
+
+        m.forEach((row, i) => {
+            html += `<tr><td class="pr-2 text-lime-300">${alts[i]}</td>`;
+            row.forEach((v, j) => {
+                const cls = i === j ? 'text-emerald-600' : (v >= 0.5 ? 'text-lime-300 font-bold' : 'text-emerald-200');
+                html += `<td class="px-1 text-center ${cls}">${v.toFixed(2)}</td>`;
+            });
+            html += '</tr>';
+        });
+        html += '</table>';
+        document.getElementById('cMatrix').innerHTML = html;
+    }
+
+    function renderRadar(res) {
+        const criteria = res.criteria.map(c => c.name.split(' ')[0]);
+        const traces = res.electre.alternatives.map((name, i) => {
+            const norm = res.electre.normalized[i];
+            const values = res.criteria.map(c => norm[c.id]);
+            return {
+                type: 'scatterpolar',
+                r: [...values, values[0]],
+                theta: [...criteria, criteria[0]],
+                name: name,
+                fill: 'toself',
+                opacity: 0.35
+            };
+        });
+
+        const layout = {
+            polar: {
+                bgcolor: 'rgba(0,0,0,0)',
+                radialaxis: {
+                    visible: true,
+                    range: [0, 1],
+                    gridcolor: '#166534',
+                    tickfont: {color: '#a7f3d0'}
+                },
+                angularaxis: {
+                    gridcolor: '#166534',
+                    tickfont: {color: '#d1fae5', size: 13}
+                }
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            showlegend: true,
+            legend: {orientation: 'h', y: -0.1}
+        };
+
+        Plotly.newPlot('radarDiv', traces, layout, {responsive: true});
+    }
+
+    document.getElementById('calcBtn').addEventListener('click', calculate);
+    calculate();  // автозапуск при загрузке
+</script>
+</body>
+</html>
