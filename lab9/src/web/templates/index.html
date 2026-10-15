@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Сеть Хопфилда (ЛР №9)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+        .cell {
+            width: 22px;
+            height: 22px;
+            display: inline-block;
+            border: 1px solid #064e3b;
+        }
+        .cell-on { background-color: #a3e635; }
+        .cell-off { background-color: #022c22; }
+        .grid-10 {
+            display: grid;
+            grid-template-columns: repeat(10, 22px);
+            gap: 0;
+            border: 2px solid #166534;
+            padding: 4px;
+            background-color: #052e16;
+            border-radius: 6px;
+        }
+    </style>
+</head>
+<body class="bg-emerald-950 text-emerald-50 min-h-screen p-8 font-sans">
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2 text-lime-300">Нейронная сеть Хопфилда</h1>
+    <p class="text-emerald-300 mb-8">Лабораторная работа №9. Вариант 9 — Буквы М, Е, В (10×10)</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Панель управления -->
+        <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700 h-fit">
+            <h2 class="text-xl font-semibold mb-4 text-lime-300 border-b border-emerald-700 pb-2">Управление</h2>
+
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-2">Выберите букву:</label>
+                    <select id="patternSelect" class="w-full bg-emerald-800 rounded p-2 text-white outline-none">
+                        <option value="М">М</option>
+                        <option value="Е">Е</option>
+                        <option value="В">В</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-2">
+                        Зашумление: <span id="noiseVal" class="text-lime-300 font-bold">20</span>%
+                    </label>
+                    <input type="range" id="noiseRange" min="0" max="100" step="5" value="20"
+                           class="w-full accent-lime-500">
+                </div>
+
+                <button id="restoreBtn"
+                        class="w-full bg-lime-600 hover:bg-lime-500 text-emerald-950 font-bold py-3 rounded transition">
+                    Восстановить образ
+                </button>
+
+                <div class="pt-4 border-t border-emerald-700">
+                    <label class="block text-sm text-emerald-300 mb-2">Seed (для зашумления):</label>
+                    <input type="number" id="seed" value="42"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none mb-3">
+
+                    <label class="block text-sm text-emerald-300 mb-2">Тестов на уровень:</label>
+                    <input type="number" id="trials" value="10" min="1" max="100"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none mb-3">
+
+                    <button id="runTestsBtn"
+                            class="w-full bg-lime-700 hover:bg-lime-600 text-emerald-50 font-bold py-3 rounded transition">
+                        Прогнать все тесты
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Восстановление образа</h3>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                    <div class="text-center">
+                        <p class="text-sm text-emerald-300 mb-2">Эталон</p>
+                        <div id="originalGrid" class="flex justify-center"></div>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-emerald-300 mb-2">Зашумлённый</p>
+                        <div id="noisyGrid" class="flex justify-center"></div>
+                    </div>
+                    <div class="text-center">
+                        <p class="text-sm text-emerald-300 mb-2">Восстановленный</p>
+                        <div id="restoredGrid" class="flex justify-center"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Точность распознавания от процента зашумления</h3>
+                <div id="accuracyPlot" class="w-full h-[380px]"></div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Детальные результаты</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-emerald-300 border-b border-emerald-700">
+                        <tr>
+                            <th class="py-2">Зашумление</th>
+                            <th class="py-2">М</th>
+                            <th class="py-2">Е</th>
+                            <th class="py-2">В</th>
+                            <th class="py-2">Средняя</th>
+                        </tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const noiseRange = document.getElementById('noiseRange');
+    const noiseVal = document.getElementById('noiseVal');
+    const patternSelect = document.getElementById('patternSelect');
+
+    noiseRange.addEventListener('input', e => {
+        noiseVal.textContent = e.target.value;
+        restore();
+    });
+
+    patternSelect.addEventListener('change', restore);
+
+    document.getElementById('restoreBtn').addEventListener('click', restore);
+
+    function renderGrid(containerId, matrix) {
+        const container = document.getElementById(containerId);
+        let html = '<div class="grid-10">';
+        for (let i = 0; i < matrix.length; i++) {
+            for (let j = 0; j < matrix[i].length; j++) {
+                const cls = matrix[i][j] === 1 ? 'cell cell-on' : 'cell cell-off';
+                html += `<div class="${cls}"></div>`;
+            }
+        }
+        html += '</div>';
+        container.innerHTML = html;
+    }
+
+    async function restore() {
+        const payload = {
+            pattern: patternSelect.value,
+            noise: parseInt(noiseRange.value),
+            seed: parseInt(document.getElementById('seed').value) || 42
+        };
+
+        const res = await fetch('/api/noisy', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        renderGrid('originalGrid', res.original);
+        renderGrid('noisyGrid', res.noisy);
+        renderGrid('restoredGrid', res.restored);
+    }
+
+    async function runTests() {
+        const payload = {
+            seed: parseInt(document.getElementById('seed').value) || 42,
+            trials: parseInt(document.getElementById('trials').value) || 10
+        };
+
+        const res = await fetch('/api/test', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        renderAccuracyPlot(res.summary);
+        renderResultsTable(res.summary);
+    }
+
+    function renderAccuracyPlot(summary) {
+        const x = summary.map(s => s.noise);
+        const y = summary.map(s => s.avg_accuracy * 100);
+
+        const trace = {
+            x: x,
+            y: y,
+            mode: 'lines+markers',
+            name: 'Средняя точность',
+            line: {color: '#a3e635', width: 3},
+            marker: {size: 9, color: '#65a30d'}
+        };
+
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            xaxis: {title: 'Зашумление, %', gridcolor: '#166534', dtick: 10},
+            yaxis: {title: 'Точность, %', gridcolor: '#166534', range: [0, 105]},
+            margin: {t: 20, r: 20, b: 60, l: 60}
+        };
+
+        Plotly.newPlot('accuracyPlot', [trace], layout, {responsive: true});
+    }
+
+    function renderResultsTable(summary) {
+        const tbody = document.getElementById('resultsBody');
+        tbody.innerHTML = '';
+        summary.forEach(s => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-emerald-800/60';
+            const perM = (s.per_pattern['М'] * 100).toFixed(0);
+            const perE = (s.per_pattern['Е'] * 100).toFixed(0);
+            const perV = (s.per_pattern['В'] * 100).toFixed(0);
+            const avg = (s.avg_accuracy * 100).toFixed(0);
+            tr.innerHTML = `
+                <td class="py-1">${s.noise}%</td>
+                <td class="py-1">${perM}%</td>
+                <td class="py-1">${perE}%</td>
+                <td class="py-1">${perV}%</td>
+                <td class="py-1 text-lime-300 font-bold">${avg}%</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    document.getElementById('runTestsBtn').addEventListener('click', runTests);
+
+    // Автозапуск
+    restore();
+    runTests();
+</script>
+</body>
+</html>
