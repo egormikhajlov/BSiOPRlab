@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Методы распознавания — Вина (ЛР №7)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-emerald-950 text-emerald-50 min-h-screen p-8 font-sans">
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2 text-lime-300">Методы распознавания в экспертной системе</h1>
+    <p class="text-emerald-300 mb-8">Лабораторная работа №7. Вариант 9 — Классификация вин: «Красные» (Класс 1) vs «Белые» (Класс 2)</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Ввод признаков -->
+        <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700 h-fit">
+            <h2 class="text-xl font-semibold mb-4 text-lime-300">Ввод признаков вина</h2>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">1. Крепость (%)</label>
+                    <input type="number" id="f1" step="0.1" value="13.2"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">2. Остаточный сахар (г/л)</label>
+                    <input type="number" id="f2" step="0.1" value="2.8"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">3. Кислотность (г/л)</label>
+                    <input type="number" id="f3" step="0.1" value="6.1"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">4. Танинность (0–10)</label>
+                    <input type="number" id="f4" step="0.1" value="7.8"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">5. Температура подачи (°C)</label>
+                    <input type="number" id="f5" step="0.1" value="17"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+
+                <button id="recognizeBtn"
+                        class="w-full bg-lime-600 hover:bg-lime-500 text-emerald-950 font-bold py-3 rounded mt-4 transition">
+                    Распознать вино
+                </button>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <!-- Минимальное расстояние -->
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-lime-300 mb-2">Метод минимального расстояния</h3>
+                <p class="text-xs text-emerald-400 mb-4">Сравнение с прототипами классов (средними векторами признаков)</p>
+                <div class="flex justify-between text-sm mb-3">
+                    <span>D1 (Красные): <span id="md_d1" class="font-mono text-white">—</span></span>
+                    <span>D2 (Белые): <span id="md_d2" class="font-mono text-white">—</span></span>
+                </div>
+                <div class="p-4 rounded bg-emerald-800/70 text-center">
+                    <span class="text-emerald-300 block text-xs mb-1">Решение:</span>
+                    <span id="md_result" class="text-2xl font-bold text-lime-200"></span>
+                </div>
+            </div>
+
+            <!-- Перцептрон -->
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-lime-300 mb-2">Разделяющая функция (алгоритм восприятия)</h3>
+                <p class="text-xs text-emerald-400 mb-2">Линейная граница между классами, обученная итеративно</p>
+                <p id="perc_eq" class="text-xs font-mono text-emerald-300 mb-4 overflow-x-auto whitespace-nowrap"></p>
+                <div class="text-sm mb-3">
+                    <span>Значение D12: <span id="perc_d12" class="font-mono text-white">—</span></span>
+                    <p class="text-xs text-emerald-400 mt-1">D12 &gt; 0 → Красное, D12 &lt; 0 → Белое</p>
+                </div>
+                <div class="p-4 rounded bg-emerald-800/70 text-center">
+                    <span class="text-emerald-300 block text-xs mb-1">Решение:</span>
+                    <span id="perc_result" class="text-2xl font-bold text-lime-200"></span>
+                </div>
+            </div>
+
+            <!-- График сходимости -->
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-lime-300 mb-2">Сходимость перцептрона</h3>
+                <p class="text-xs text-emerald-400 mb-3">Количество ошибок на каждой итерации обучения</p>
+                <div id="convergenceDiv" class="w-full h-[300px]"></div>
+            </div>
+
+            <!-- Обуч. выборка -->
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-lime-300 mb-3">Обучающая выборка</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-xs text-left">
+                        <thead class="text-emerald-300 border-b border-emerald-700">
+                        <tr>
+                            <th class="py-2">№</th>
+                            <th class="py-2">Название</th>
+                            <th class="py-2">Креп.</th>
+                            <th class="py-2">Сахар</th>
+                            <th class="py-2">Кисл.</th>
+                            <th class="py-2">Тан.</th>
+                            <th class="py-2">Темп.</th>
+                            <th class="py-2">Класс</th>
+                        </tr>
+                        </thead>
+                        <tbody id="trainingBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    let trainingInfoLoaded = false;
+
+    async function loadInfo() {
+        const res = await fetch('/api/info').then(r => r.json());
+        renderTraining(res.training_data);
+        renderConvergence(res.training);
+        trainingInfoLoaded = true;
+    }
+
+    function renderTraining(data) {
+        const tbody = document.getElementById('trainingBody');
+        tbody.innerHTML = '';
+        data.forEach(obj => {
+            const tr = document.createElement('tr');
+            tr.className = 'border-b border-emerald-800/60';
+            const cls = obj.class_label === 1
+                ? '<span class="text-red-400 font-bold">Красное</span>'
+                : '<span class="text-yellow-300 font-bold">Белое</span>';
+            tr.innerHTML = `
+                <td class="py-1">${obj.id}</td>
+                <td class="py-1">${obj.name}</td>
+                <td class="py-1">${obj.features[0]}</td>
+                <td class="py-1">${obj.features[1]}</td>
+                <td class="py-1">${obj.features[2]}</td>
+                <td class="py-1">${obj.features[3]}</td>
+                <td class="py-1">${obj.features[4]}</td>
+                <td class="py-1">${cls}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    function renderConvergence(training) {
+        const iterations = training.history.map((_, i) => i + 1);
+        const errors = training.history;
+
+        const trace = {
+            x: iterations,
+            y: errors,
+            mode: 'lines+markers',
+            line: {color: '#a3e635', width: 2},
+            marker: {size: 6, color: '#65a30d'}
+        };
+
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            xaxis: {title: 'Итерация', gridcolor: '#166534'},
+            yaxis: {title: 'Ошибок', gridcolor: '#166534'},
+            margin: {t: 10, r: 20, b: 50, l: 50}
+        };
+
+        Plotly.newPlot('convergenceDiv', [trace], layout, {responsive: true});
+    }
+
+    async function recognize() {
+        const payload = {
+            f1: document.getElementById('f1').value,
+            f2: document.getElementById('f2').value,
+            f3: document.getElementById('f3').value,
+            f4: document.getElementById('f4').value,
+            f5: document.getElementById('f5').value,
+        };
+
+        const res = await fetch('/api/recognize', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        // Минимальное расстояние
+        document.getElementById('md_d1').innerText = res.min_distance.d1;
+        document.getElementById('md_d2').innerText = res.min_distance.d2;
+        const mdRes = document.getElementById('md_result');
+        if (res.min_distance.predicted_class === 1) {
+            mdRes.innerText = 'Класс 1: Красное вино';
+            mdRes.className = 'text-2xl font-bold text-red-400';
+        } else {
+            mdRes.innerText = 'Класс 2: Белое вино';
+            mdRes.className = 'text-2xl font-bold text-yellow-300';
+        }
+
+        // Перцептрон
+        document.getElementById('perc_eq').innerText = res.perceptron.equation;
+        document.getElementById('perc_d12').innerText = res.perceptron.d12;
+        const pRes = document.getElementById('perc_result');
+        if (res.perceptron.predicted_class === 1) {
+            pRes.innerText = 'Класс 1: Красное вино';
+            pRes.className = 'text-2xl font-bold text-red-400';
+        } else {
+            pRes.innerText = 'Класс 2: Белое вино';
+            pRes.className = 'text-2xl font-bold text-yellow-300';
+        }
+    }
+
+    document.getElementById('recognizeBtn').addEventListener('click', recognize);
+
+    // Автозапуск
+    loadInfo().then(recognize);
+</script>
+</body>
+</html>
