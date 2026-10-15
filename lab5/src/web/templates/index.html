@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Метод Монте-Карло (ЛР №5)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-emerald-950 text-emerald-50 min-h-screen p-8 font-sans">
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2 text-lime-300">Метод Монте-Карло</h1>
+    <p class="text-emerald-300 mb-8">Лабораторная работа №5. Вариант 9: A = 25%, B = 2, C = 65, D = 110, полином №6</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- Панель управления -->
+        <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700 h-fit">
+            <h2 class="text-xl font-semibold mb-4 border-b border-emerald-700 pb-2 text-lime-300">Параметры моделирования</h2>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">Количество партий (N)</label>
+                    <input type="number" id="n" value="10000" min="100" step="100"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">Seed LFSR (hex)</label>
+                    <input type="text" id="seed" value="0xACE1"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">Доля брака A, %</label>
+                    <input type="number" id="a_percent" value="25" step="0.1"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <div class="grid grid-cols-3 gap-2">
+                    <div>
+                        <label class="block text-xs text-emerald-300 mb-1">B (контроль)</label>
+                        <input type="number" id="cost_control" value="2" step="0.1"
+                               class="w-full bg-emerald-800 rounded p-2 text-white outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-emerald-300 mb-1">C (подгонка)</label>
+                        <input type="number" id="cost_fix" value="65" step="0.1"
+                               class="w-full bg-emerald-800 rounded p-2 text-white outline-none">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-emerald-300 mb-1">D (замена)</label>
+                        <input type="number" id="cost_replace" value="110" step="0.1"
+                               class="w-full bg-emerald-800 rounded p-2 text-white outline-none">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm text-emerald-300 mb-1">Шаг по проценту контроля, %</label>
+                    <input type="number" id="step" value="5" min="1" max="100"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none focus:ring-2 focus:ring-lime-500">
+                </div>
+                <button id="runBtn"
+                        class="w-full bg-lime-600 hover:bg-lime-500 text-emerald-950 font-bold py-3 px-4 rounded transition duration-200 mt-2">
+                    Выполнить моделирование
+                </button>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="lg:col-span-2 space-y-6">
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-emerald-300 text-sm font-semibold uppercase tracking-wider mb-2">Оптимальный процент контроля</h3>
+                <div id="bestResult" class="text-2xl font-bold text-lime-300">—</div>
+                <div id="bestCost" class="text-emerald-200 text-sm mt-1"></div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Зависимость затрат от процента контроля</h3>
+                <div id="plotDiv" class="w-full h-[400px]"></div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Результаты по шагам</h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-sm text-left">
+                        <thead class="text-emerald-300 border-b border-emerald-700">
+                        <tr>
+                            <th class="py-2">Контроль, %</th>
+                            <th class="py-2">Суммарные затраты, руб.</th>
+                            <th class="py-2">Затраты на партию, руб.</th>
+                        </tr>
+                        </thead>
+                        <tbody id="tableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const runBtn = document.getElementById('runBtn');
+
+    runBtn.addEventListener('click', async () => {
+        const payload = {
+            n: document.getElementById('n').value,
+            seed: document.getElementById('seed').value,
+            a_percent: document.getElementById('a_percent').value,
+            cost_control: document.getElementById('cost_control').value,
+            cost_fix: document.getElementById('cost_fix').value,
+            cost_replace: document.getElementById('cost_replace').value,
+            step: document.getElementById('step').value
+        };
+
+        runBtn.disabled = true;
+        runBtn.textContent = 'Моделирование...';
+
+        try {
+            const res = await fetch('/api/simulate', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(payload)
+            }).then(r => r.json());
+
+            if (res.error) {
+                alert(res.error);
+                return;
+            }
+
+            renderBest(res);
+            renderPlot(res);
+            renderTable(res);
+        } catch (e) {
+            alert('Ошибка: ' + e.message);
+        } finally {
+            runBtn.disabled = false;
+            runBtn.textContent = 'Выполнить моделирование';
+        }
+    });
+
+    function renderBest(res) {
+        document.getElementById('bestResult').innerText = `Контроль ${res.best_percent}% партий`;
+        document.getElementById('bestCost').innerText =
+            `Суммарные затраты: ${res.best_cost.toLocaleString('ru-RU')} руб. на ${res.config.n.toLocaleString('ru-RU')} партий`;
+    }
+
+    function renderPlot(res) {
+        const x = res.points.map(p => p.control_percent);
+        const y = res.points.map(p => p.total_cost);
+
+        const trace = {
+            x: x,
+            y: y,
+            mode: 'lines+markers',
+            name: 'Суммарные затраты',
+            line: {color: '#a3e635', width: 2},
+            marker: {size: 7, color: '#65a30d'}
+        };
+
+        const bestTrace = {
+            x: [res.best_percent],
+            y: [res.best_cost],
+            mode: 'markers',
+            name: 'Минимум',
+            marker: {color: '#f59e0b', size: 16, symbol: 'star'}
+        };
+
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            xaxis: {
+                title: 'Процент контроля, %',
+                gridcolor: '#166534',
+                dtick: res.config.step
+            },
+            yaxis: {
+                title: 'Суммарные затраты, руб.',
+                gridcolor: '#166534'
+            },
+            legend: {orientation: 'h', y: -0.2},
+            margin: {t: 20, r: 20, b: 60, l: 70}
+        };
+
+        Plotly.newPlot('plotDiv', [trace, bestTrace], layout, {responsive: true});
+    }
+
+    function renderTable(res) {
+        const tbody = document.getElementById('tableBody');
+        tbody.innerHTML = '';
+        res.points.forEach(p => {
+            const tr = document.createElement('tr');
+            const isBest = p.control_percent === res.best_percent;
+            tr.className = isBest ? 'bg-lime-900/40 font-bold' : 'border-b border-emerald-800/50';
+            tr.innerHTML = `
+                <td class="py-1">${p.control_percent}%</td>
+                <td class="py-1">${p.total_cost.toLocaleString('ru-RU')}</td>
+                <td class="py-1">${p.cost_per_party.toFixed(4)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    // Автозапуск при открытии страницы
+    runBtn.click();
+</script>
+</body>
+</html>
