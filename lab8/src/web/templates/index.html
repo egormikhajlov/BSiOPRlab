@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Кластерный анализ — Города (ЛР №8)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body class="bg-emerald-950 text-emerald-50 min-h-screen p-8 font-sans">
+<div class="max-w-7xl mx-auto">
+    <h1 class="text-3xl font-bold mb-2 text-lime-300">Методы кластерного анализа</h1>
+    <p class="text-emerald-300 mb-8">Лабораторная работа №8. Вариант 9 — Кластеризация городов по 3 признакам</p>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        <!-- Управление -->
+        <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700 h-fit">
+            <h2 class="text-xl font-semibold mb-4 text-lime-300 border-b border-emerald-700 pb-2">Управление алгоритмами</h2>
+
+            <div class="space-y-6">
+                <div class="p-4 bg-emerald-900/70 rounded-lg border border-emerald-700">
+                    <h3 class="text-lg text-lime-300 font-bold mb-2">Метод К средних</h3>
+                    <label class="block text-sm text-emerald-300 mb-1">Количество кластеров (K):</label>
+                    <input type="number" id="k_input" value="3" min="2" max="12"
+                           class="w-full bg-emerald-800 rounded p-2 text-white outline-none mb-3">
+                    <button onclick="runClustering('kmeans')"
+                            class="w-full bg-lime-600 hover:bg-lime-500 text-emerald-950 font-bold py-2 rounded transition">
+                        Выполнить К средних
+                    </button>
+                </div>
+
+                <div class="p-4 bg-emerald-900/70 rounded-lg border border-emerald-700">
+                    <h3 class="text-lg text-lime-300 font-bold mb-2">Метод Максимина</h3>
+                    <p class="text-xs text-emerald-300 mb-3">Количество кластеров определяется автоматически.</p>
+                    <button onclick="runClustering('maximin')"
+                            class="w-full bg-lime-700 hover:bg-lime-600 text-emerald-50 font-bold py-2 rounded transition">
+                        Выполнить Максимин
+                    </button>
+                </div>
+
+                <div class="pt-4 border-t border-emerald-700">
+                    <label class="block text-sm text-emerald-300 mb-2">Тип визуализации:</label>
+                    <div class="flex gap-2">
+                        <button id="btn2d" onclick="switchView('2d')"
+                                class="flex-1 bg-lime-600 text-emerald-950 font-bold py-2 rounded transition">
+                            2D
+                        </button>
+                        <button id="btn3d" onclick="switchView('3d')"
+                                class="flex-1 bg-emerald-800 text-emerald-200 font-bold py-2 rounded transition">
+                            3D
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Результаты -->
+        <div class="lg:col-span-2 space-y-6">
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-2">Визуализация кластеров</h3>
+                <p class="text-xs text-emerald-300 mb-4" id="plotHint">
+                    2D: ось X — Население, ось Y — Зарплата, размер точки — Площадь
+                </p>
+                <div id="plotDiv" class="w-full h-[480px]"></div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">Текстовая расшифровка кластеров</h3>
+                <div id="resultsContent" class="space-y-4 text-sm">
+                    <p class="text-emerald-400">Запустите алгоритм для отображения результатов...</p>
+                </div>
+            </div>
+
+            <div class="bg-emerald-900/50 p-6 rounded-xl shadow-lg border border-emerald-700">
+                <h3 class="text-lg font-semibold text-white mb-4">История итераций</h3>
+                <div id="historyContent" class="text-xs font-mono text-emerald-200 space-y-1 max-h-64 overflow-y-auto">
+                    <p class="text-emerald-400">Запустите алгоритм для отображения истории...</p>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    const colors = ['#a3e635', '#34d399', '#22d3ee', '#f472b6', '#fbbf24', '#fb923c', '#c084fc', '#f87171'];
+    let currentView = '2d';
+    let lastResult = null;
+
+    async function runClustering(method) {
+        const payload = {
+            method: method,
+            k: parseInt(document.getElementById('k_input').value)
+        };
+
+        const res = await fetch('/api/cluster', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        }).then(r => r.json());
+
+        if (res.error) {
+            alert(res.error);
+            return;
+        }
+
+        lastResult = res;
+        renderResults(res.clusters);
+        renderHistory(res.history);
+        renderPlot(res.clusters);
+    }
+
+    function switchView(view) {
+        currentView = view;
+        const btn2d = document.getElementById('btn2d');
+        const btn3d = document.getElementById('btn3d');
+        const hint = document.getElementById('plotHint');
+
+        if (view === '2d') {
+            btn2d.className = 'flex-1 bg-lime-600 text-emerald-950 font-bold py-2 rounded transition';
+            btn3d.className = 'flex-1 bg-emerald-800 text-emerald-200 font-bold py-2 rounded transition';
+            hint.innerText = '2D: ось X — Население, ось Y — Зарплата, размер точки — Площадь';
+        } else {
+            btn2d.className = 'flex-1 bg-emerald-800 text-emerald-200 font-bold py-2 rounded transition';
+            btn3d.className = 'flex-1 bg-lime-600 text-emerald-950 font-bold py-2 rounded transition';
+            hint.innerText = '3D: оси — Население, Зарплата, Площадь';
+        }
+
+        if (lastResult) {
+            renderPlot(lastResult.clusters);
+        }
+    }
+
+    function renderPlot(clusters) {
+        if (currentView === '2d') {
+            render2D(clusters);
+        } else {
+            render3D(clusters);
+        }
+    }
+
+    function render2D(clusters) {
+        const traces = [];
+        const markerSizes = [];
+
+        // Размеры точек: пропорционально площади
+        const allAreas = clusters.flatMap(c => c.objects.map(o => o.features[2]));
+        const maxArea = Math.max(...allAreas);
+
+        clusters.forEach((c, idx) => {
+            const color = colors[idx % colors.length];
+            const x = c.objects.map(o => o.features[0]);
+            const y = c.objects.map(o => o.features[1]);
+            const sizes = c.objects.map(o => 10 + 35 * (o.features[2] / maxArea));
+            const labels = c.objects.map(o => o.name);
+
+            traces.push({
+                x: x,
+                y: y,
+                mode: 'markers+text',
+                type: 'scatter',
+                name: `Кластер ${c.cluster_id}`,
+                text: labels,
+                textposition: 'top center',
+                textfont: {size: 9, color: '#d1fae5'},
+                marker: {
+                    size: sizes,
+                    color: color,
+                    opacity: 0.75,
+                    line: {color: '#022c22', width: 1}
+                }
+            });
+
+            // Прототип
+            traces.push({
+                x: [c.prototype[0]],
+                y: [c.prototype[1]],
+                mode: 'markers',
+                name: `Центр ${c.cluster_id}`,
+                marker: {
+                    size: 20,
+                    color: color,
+                    symbol: 'star',
+                    line: {color: '#fff', width: 2}
+                },
+                showlegend: false
+            });
+        });
+
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            xaxis: {title: 'Население (тыс. чел.)', gridcolor: '#166534'},
+            yaxis: {title: 'Средняя зарплата (тыс. ₽)', gridcolor: '#166534'},
+            legend: {orientation: 'h', y: -0.15},
+            margin: {t: 20, r: 20, b: 60, l: 70}
+        };
+
+        Plotly.newPlot('plotDiv', traces, layout, {responsive: true});
+    }
+
+    function render3D(clusters) {
+        const traces = [];
+
+        clusters.forEach((c, idx) => {
+            const color = colors[idx % colors.length];
+            traces.push({
+                x: c.objects.map(o => o.features[0]),
+                y: c.objects.map(o => o.features[1]),
+                z: c.objects.map(o => o.features[2]),
+                mode: 'markers+text',
+                type: 'scatter3d',
+                name: `Кластер ${c.cluster_id}`,
+                text: c.objects.map(o => o.name),
+                textfont: {size: 9, color: '#d1fae5'},
+                marker: {
+                    size: 8,
+                    color: color,
+                    opacity: 0.85,
+                    line: {color: '#022c22', width: 1}
+                }
+            });
+
+            // Прототип
+            traces.push({
+                x: [c.prototype[0]],
+                y: [c.prototype[1]],
+                z: [c.prototype[2]],
+                mode: 'markers',
+                type: 'scatter3d',
+                name: `Центр ${c.cluster_id}`,
+                marker: {
+                    size: 12,
+                    color: color,
+                    symbol: 'diamond',
+                    line: {color: '#fff', width: 2}
+                },
+                showlegend: false
+            });
+        });
+
+        const layout = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#d1fae5'},
+            scene: {
+                xaxis: {title: 'Население', gridcolor: '#166534', backgroundcolor: 'rgba(0,0,0,0)'},
+                yaxis: {title: 'Зарплата', gridcolor: '#166534', backgroundcolor: 'rgba(0,0,0,0)'},
+                zaxis: {title: 'Площадь', gridcolor: '#166534', backgroundcolor: 'rgba(0,0,0,0)'},
+                bgcolor: 'rgba(0,0,0,0)'
+            },
+            legend: {orientation: 'h', y: -0.05},
+            margin: {t: 20, r: 20, b: 20, l: 20}
+        };
+
+        Plotly.newPlot('plotDiv', traces, layout, {responsive: true});
+    }
+
+    function renderResults(clusters) {
+        const container = document.getElementById('resultsContent');
+        container.innerHTML = '';
+
+        clusters.forEach((c, index) => {
+            const color = colors[index % colors.length];
+            const pPop = c.prototype[0].toFixed(0);
+            const pSal = c.prototype[1].toFixed(1);
+            const pArea = c.prototype[2].toFixed(0);
+
+            let html = `
+                <div class="p-4 rounded-lg bg-emerald-900/70 border-l-4" style="border-color: ${color}">
+                    <h4 class="font-bold text-white mb-2">Кластер ${c.cluster_id}
+                        <span class="text-emerald-300 font-normal text-xs ml-2">
+                            (Центр: население ${pPop} тыс., зарплата ${pSal} тыс. ₽, площадь ${pArea} км²)
+                        </span>
+                    </h4>
+                    <ul class="list-disc pl-5 text-emerald-200 space-y-1">
+            `;
+            c.objects.forEach(obj => {
+                html += `
+                    <li>
+                        <span class="text-white font-medium">${obj.name}</span>
+                        <span class="text-emerald-400 text-xs ml-2">
+                            Нас: ${obj.features[0]} тыс. | ЗП: ${obj.features[1]} тыс. | S: ${obj.features[2]} км²
+                        </span>
+                    </li>
+                `;
+            });
+            html += '</ul></div>';
+            container.innerHTML += html;
+        });
+    }
+
+    function renderHistory(history) {
+        const container = document.getElementById('historyContent');
+        if (!history || history.length === 0) {
+            container.innerHTML = '<p class="text-emerald-400">История пуста.</p>';
+            return;
+        }
+
+        let html = '';
+        history.forEach(h => {
+            if (h.iteration !== undefined) {
+                html += `<div class="border-b border-emerald-800 pb-1 mb-1">
+                    <span class="text-lime-300">Итерация ${h.iteration}:</span>
+                    размеры кластеров = [${h.cluster_sizes.join(', ')}]
+                </div>`;
+            } else if (h.step !== undefined) {
+                html += `<div class="border-b border-emerald-800 pb-1 mb-1">
+                    <span class="text-lime-300">Шаг ${h.step}:</span> ${h.action}
+                </div>`;
+            }
+        });
+        container.innerHTML = html;
+    }
+
+    // Автозапуск
+    runClustering('kmeans');
+</script>
+</body>
+</html>
